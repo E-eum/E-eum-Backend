@@ -35,30 +35,23 @@ public class ReviewRepositoryImpl implements ReviewRepositoryCustom {
         if (cursor != null) {
             Review lastReview = mongoTemplate.findById(cursor, Review.class);
             if (lastReview != null) {
-                Object cursorValue;
-
-                switch (sortBy) {
-                    case "createdAt":
-                        cursorValue = lastReview.getCreatedAt();
-                        break;
-                    case "rating":
-                        cursorValue = lastReview.getRating();
-                        break;
-                    default:
-                        cursorValue = lastReview.getId();
-                        sortBy = "_id";
-                        break;
-                }
+                Object cursorValue = getSortValue(lastReview, sortBy);
 
                 if (sortDirection == Sort.Direction.DESC) {
-                    query.addCriteria(Criteria.where(sortBy).lt(cursorValue));
+                    query.addCriteria(new Criteria().orOperator(
+                            Criteria.where(sortBy).lt(cursorValue),
+                            Criteria.where(sortBy).is(cursorValue).and("_id").lt(cursor)
+                    ));
                 } else {
-                    query.addCriteria(Criteria.where(sortBy).gt(cursorValue));
+                    query.addCriteria(new Criteria().orOperator(
+                            Criteria.where(sortBy).gt(cursorValue),
+                            Criteria.where(sortBy).is(cursorValue).and("_id").gt(cursor)
+                    ));
                 }
             }
         }
 
-        query.with(Sort.by(sortDirection, sortBy));
+        query.with(Sort.by(sortDirection, sortBy).and(Sort.by(Sort.Direction.ASC, "_id")));
         query.limit(size);
 
         return mongoTemplate.find(query, Review.class);
@@ -85,5 +78,14 @@ public class ReviewRepositoryImpl implements ReviewRepositoryCustom {
                 .map(doc -> doc.getString("imageUrls"))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+    }
+
+    private Object getSortValue(Review review, String sortBy) {
+        return switch (sortBy) {
+            case "createdAt" -> review.getCreatedAt();
+            case "rating" -> review.getRating();
+            case "updatedAt" -> review.getUpdatedAt();
+            default -> review.getId();
+        };
     }
 }
